@@ -22,6 +22,20 @@ func init() {
 	Command.Flags().StringVarP(&host, "host", "", "", "Host to listen on (default: all interfaces)")
 }
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 var Command = &cobra.Command{
 	Use: "run",
 	RunE: func(_ *cobra.Command, _ []string) error {
@@ -35,6 +49,8 @@ var Command = &cobra.Command{
 		mux.HandleFunc("POST /subscribe", subscribe.Handler(syncServer))
 		mux.HandleFunc("POST /set-progress", setprogress.Handler(syncServer))
 		mux.HandleFunc("POST /set-state", setplaystate.Handler(syncServer))
+
+		corsMux := corsMiddleware(mux)
 
 		finished := make(chan struct{})
 
@@ -55,7 +71,7 @@ var Command = &cobra.Command{
 		logging.Info("starting sync-watch-server", "host", host, "port", port)
 		err := http.ListenAndServe(
 			addr,
-			mux,
+			corsMux,
 		)
 
 		finished <- struct{}{}

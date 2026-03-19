@@ -27,7 +27,7 @@ var Command = &cobra.Command{
 	RunE: func(_ *cobra.Command, _ []string) error {
 		syncServer := server.New()
 		mux := http.NewServeMux()
-		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("OK"))
 		})

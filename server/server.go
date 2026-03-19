@@ -34,7 +34,7 @@ func New() *Server {
 	}
 }
 
-func (s *Server) cleanupObservers() {
+func (s *Server) CleanupObservers() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -46,7 +46,6 @@ func (s *Server) cleanupObservers() {
 }
 
 func (s *Server) getNextID() string {
-	return "KE64C7kR"
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 

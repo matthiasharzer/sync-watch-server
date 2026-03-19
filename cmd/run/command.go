@@ -3,6 +3,7 @@ package run
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/matthiasharzer/sync-watch-server/api/createroom"
 	"github.com/matthiasharzer/sync-watch-server/api/setplaystate"
@@ -35,13 +36,29 @@ var Command = &cobra.Command{
 		mux.HandleFunc("POST /set-progress", setprogress.Handler(syncServer))
 		mux.HandleFunc("POST /set-state", setplaystate.Handler(syncServer))
 
+		finished := make(chan struct{})
+
+		go func() {
+			for {
+				time.Sleep(10 * time.Minute)
+				select {
+				case <-finished:
+					return
+				default:
+					syncServer.CleanupObservers()
+				}
+			}
+		}()
+
 		addr := fmt.Sprintf("%s:%d", host, port)
 
-		logging.Info("Starting sync-watch-server", "host", host, "port", port)
+		logging.Info("starting sync-watch-server", "host", host, "port", port)
 		err := http.ListenAndServe(
 			addr,
 			mux,
 		)
+
+		finished <- struct{}{}
 
 		return err
 	},

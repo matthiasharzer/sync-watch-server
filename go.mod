@@ -1,6 +1,6 @@
 module github.com/matthiasharzer/sync-watch-server
 
-go 1.25.4
+go 1.26.0
 
 tool honnef.co/go/tools/cmd/staticcheck
 

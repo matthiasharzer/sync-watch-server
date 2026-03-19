@@ -1,4 +1,4 @@
-module template
+module github.com/matthiasharzer/sync-watch-server
 
 go 1.25.4
 

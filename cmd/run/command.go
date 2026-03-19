@@ -1,0 +1,42 @@
+package run
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/matthiasharzer/sync-watch-server/api/createroom"
+	"github.com/matthiasharzer/sync-watch-server/logging"
+	"github.com/matthiasharzer/sync-watch-server/server"
+	"github.com/spf13/cobra"
+)
+
+var port int
+var host string
+
+func init() {
+	Command.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
+	Command.Flags().StringVarP(&host, "host", "", "", "Host to listen on (default: all interfaces)")
+}
+
+var Command = &cobra.Command{
+	Use: "run",
+	RunE: func(_ *cobra.Command, _ []string) error {
+		syncServer := server.New()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("OK"))
+		})
+		mux.HandleFunc("POST /create-room", createroom.Handler(syncServer))
+
+		addr := fmt.Sprintf("%s:%d", host, port)
+
+		logging.Info("Starting sync-watch-server", "host", host, "port", port)
+		err := http.ListenAndServe(
+			addr,
+			mux,
+		)
+
+		return err
+	},
+}

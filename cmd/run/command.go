@@ -39,12 +39,12 @@ var Command = &cobra.Command{
 		finished := make(chan struct{})
 
 		go func() {
+			ticker := time.NewTicker(10 * time.Minute)
 			for {
-				time.Sleep(10 * time.Minute)
 				select {
 				case <-finished:
 					return
-				default:
+				case <-ticker.C:
 					syncServer.CleanupObservers()
 				}
 			}

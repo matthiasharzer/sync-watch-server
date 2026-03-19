@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -38,17 +39,14 @@ func (s *Server) CleanupObservers() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	for _, subs := range s.subscriptions {
-		subs = slices.DeleteFunc(subs, func(sub *Observer[*Room]) bool {
+	for id, subs := range s.subscriptions {
+		s.subscriptions[id] = slices.DeleteFunc(subs, func(sub *Observer[*Room]) bool {
 			return sub.IsCanceled()
 		})
 	}
 }
 
 func (s *Server) getNextID() string {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
 	for {
 		id := randomID()
 		if _, exists := s.Rooms[id]; !exists {
@@ -66,10 +64,10 @@ func (s *Server) GetRoom(id string) (*Room, bool) {
 }
 
 func (s *Server) CreateRoom() *Room {
-	id := s.getNextID()
-
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	id := s.getNextID()
 
 	room := &Room{
 		ID:              id,
@@ -94,12 +92,13 @@ func (s *Server) updateProgress(id string, progress float64) *Room {
 	return room
 }
 
-func (s *Server) UpdateProgress(id string, progress float64) {
+func (s *Server) UpdateProgress(id string, progress float64) error {
 	room := s.updateProgress(id, progress)
 	if room == nil {
-		return
+		return errors.New("room not found")
 	}
 	s.notifySubscribers(room)
+	return nil
 }
 
 func (s *Server) updateState(id string, state PlayerState) *Room {
@@ -115,12 +114,13 @@ func (s *Server) updateState(id string, state PlayerState) *Room {
 	return room
 }
 
-func (s *Server) UpdateState(id string, state PlayerState) {
+func (s *Server) UpdateState(id string, state PlayerState) error {
 	room := s.updateState(id, state)
 	if room == nil {
-		return
+		return errors.New("room not found")
 	}
 	s.notifySubscribers(room)
+	return nil
 }
 
 func (s *Server) addObserver(id string, observer *Observer[*Room]) {
@@ -150,14 +150,17 @@ func (s *Server) SubscribeToRoom(id string, ctx context.Context) <-chan *Room {
 	return ch
 }
 
-func (s *Server) notifySubscribers(room *Room) {
+func (s *Server) getSubscribers(roomID string) []*Observer[*Room] {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	subs, ok := s.subscriptions[room.ID]
-	if !ok {
-		return
-	}
+	subs := make([]*Observer[*Room], len(s.subscriptions[roomID]))
+	copy(subs, s.subscriptions[roomID])
+	return subs
+}
+
+func (s *Server) notifySubscribers(room *Room) {
+	subs := s.getSubscribers(room.ID)
 
 	for _, sub := range subs {
 		sub.Send(room)

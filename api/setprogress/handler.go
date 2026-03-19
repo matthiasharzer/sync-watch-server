@@ -15,7 +15,11 @@ func Handler(s *server.Server) http.HandlerFunc {
 			return
 		}
 
-		s.UpdateProgress(requestBody.RoomID, requestBody.Progress)
+		err = s.UpdateProgress(requestBody.RoomID, requestBody.Progress)
+		if err != nil {
+			http.Error(w, "failed to update progress", http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}
 }

@@ -54,7 +54,7 @@ func Handler(s *server.Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := newConnection(w)
 		if err != nil {
-			http.Error(w, "failed to created connection", http.StatusInternalServerError)
+			http.Error(w, "failed to create connection", http.StatusInternalServerError)
 			return
 		}
 

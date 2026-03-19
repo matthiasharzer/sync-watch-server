@@ -30,7 +30,11 @@ func Handler(s *server.Server) http.HandlerFunc {
 			return
 		}
 
-		s.UpdateState(requestBody.RoomID, requestBody.State)
+		err = s.UpdateState(requestBody.RoomID, requestBody.State)
+		if err != nil {
+			http.Error(w, "failed to update state", http.StatusBadRequest)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}
 }

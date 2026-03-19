@@ -8,7 +8,8 @@ const (
 )
 
 type Room struct {
-	ID       string      `json:"id"`
-	Progress float64     `json:"progress"`
-	State    PlayerState `json:"state"`
+	ID              string
+	Progress        float64
+	State           PlayerState
+	LastTimeUpdated int64
 }

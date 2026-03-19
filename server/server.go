@@ -1,24 +1,14 @@
 package server
 
 import (
+	"context"
+	"slices"
 	"sync"
 	"time"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyz" +
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-type Server struct {
-	mutex *sync.RWMutex
-	Rooms map[string]*Room
-}
-
-func New() *Server {
-	return &Server{
-		mutex: &sync.RWMutex{},
-		Rooms: make(map[string]*Room),
-	}
-}
 
 func randomID() string {
 	var seededRand = time.Now().UnixNano()
@@ -28,6 +18,31 @@ func randomID() string {
 		seededRand /= int64(len(charset))
 	}
 	return string(b)
+}
+
+type Server struct {
+	mutex         *sync.RWMutex
+	Rooms         map[string]*Room
+	subscriptions map[string][]*Observer[*Room]
+}
+
+func New() *Server {
+	return &Server{
+		mutex:         &sync.RWMutex{},
+		Rooms:         make(map[string]*Room),
+		subscriptions: make(map[string][]*Observer[*Room]),
+	}
+}
+
+func (s *Server) cleanupObservers() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	for _, subs := range s.subscriptions {
+		subs = slices.DeleteFunc(subs, func(sub *Observer[*Room]) bool {
+			return sub.IsCanceled()
+		})
+	}
 }
 
 func (s *Server) getNextID() string {
@@ -57,32 +72,94 @@ func (s *Server) CreateRoom() *Room {
 	defer s.mutex.Unlock()
 
 	room := &Room{
-		ID:       id,
-		Progress: 0,
-		State:    PlayerStatePaused,
+		ID:              id,
+		Progress:        0,
+		State:           PlayerStatePaused,
+		LastTimeUpdated: time.Now().Unix(),
 	}
 	s.Rooms[id] = room
 	return room
 }
 
-func (s *Server) UpdateProgress(id string, progress float64) {
+func (s *Server) updateProgress(id string, progress float64) *Room {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	room, ok := s.Rooms[id]
 	if !ok {
-		return
+		return nil
 	}
 	room.Progress = progress
+	room.LastTimeUpdated = time.Now().Unix()
+	return room
+}
+
+func (s *Server) UpdateProgress(id string, progress float64) {
+	room := s.updateProgress(id, progress)
+	if room == nil {
+		return
+	}
+	s.notifySubscribers(room)
+}
+
+func (s *Server) updateState(id string, state PlayerState) *Room {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	room, ok := s.Rooms[id]
+	if !ok {
+		return nil
+	}
+	room.State = state
+	room.LastTimeUpdated = time.Now().Unix()
+	return room
 }
 
 func (s *Server) UpdateState(id string, state PlayerState) {
+	room := s.updateState(id, state)
+	if room == nil {
+		return
+	}
+	s.notifySubscribers(room)
+}
+
+func (s *Server) addObserver(id string, observer *Observer[*Room]) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	room, ok := s.Rooms[id]
+	s.subscriptions[id] = append(s.subscriptions[id], observer)
+}
+func (s *Server) SubscribeToRoom(id string, ctx context.Context) <-chan *Room {
+	ch := make(chan *Room)
+
+	observer := NewObserver[*Room](ctx)
+	s.addObserver(id, observer)
+
+	go func() {
+		defer close(ch)
+		r, ok := s.GetRoom(id)
+		if ok {
+			ch <- r
+		}
+
+		for room := range observer.Range() {
+			ch <- room
+		}
+	}()
+
+	return ch
+}
+
+func (s *Server) notifySubscribers(room *Room) {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	subs, ok := s.subscriptions[room.ID]
 	if !ok {
 		return
 	}
-	room.State = state
+
+	for _, sub := range subs {
+		sub.Send(room)
+	}
 }

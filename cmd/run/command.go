@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/matthiasharzer/sync-watch-server/api/createroom"
+	"github.com/matthiasharzer/sync-watch-server/api/subscribe"
 	"github.com/matthiasharzer/sync-watch-server/logging"
 	"github.com/matthiasharzer/sync-watch-server/server"
 	"github.com/spf13/cobra"
@@ -28,6 +29,7 @@ var Command = &cobra.Command{
 			w.Write([]byte("OK"))
 		})
 		mux.HandleFunc("POST /create-room", createroom.Handler(syncServer))
+		mux.HandleFunc("POST /subscribe", subscribe.Handler(syncServer))
 
 		addr := fmt.Sprintf("%s:%d", host, port)
 

@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/matthiasharzer/sync-watch-server/api/createroom"
+	"github.com/matthiasharzer/sync-watch-server/api/setplaystate"
+	"github.com/matthiasharzer/sync-watch-server/api/setprogress"
 	"github.com/matthiasharzer/sync-watch-server/api/subscribe"
 	"github.com/matthiasharzer/sync-watch-server/logging"
 	"github.com/matthiasharzer/sync-watch-server/server"
@@ -30,6 +32,8 @@ var Command = &cobra.Command{
 		})
 		mux.HandleFunc("POST /create-room", createroom.Handler(syncServer))
 		mux.HandleFunc("POST /subscribe", subscribe.Handler(syncServer))
+		mux.HandleFunc("POST /set-progress", setprogress.Handler(syncServer))
+		mux.HandleFunc("POST /set-state", setplaystate.Handler(syncServer))
 
 		addr := fmt.Sprintf("%s:%d", host, port)
 

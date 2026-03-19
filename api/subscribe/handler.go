@@ -3,25 +3,25 @@ package subscribe
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/matthiasharzer/sync-watch-server/server"
+	"github.com/matthiasharzer/sync-watch-server/util/httputil"
 )
 
-func sendNdJsonLine(w http.ResponseWriter, line any) {
+func sendNdJsonLine(w http.ResponseWriter, line any) error {
 	lineBytes, err := json.Marshal(line)
 	if err != nil {
-		http.Error(w, "failed to marshal line", http.StatusInternalServerError)
-		return
+		return errors.New("failed to marshal line")
 	}
 	ndjsonLine := append(lineBytes, '\n')
 
 	_, err = w.Write(ndjsonLine)
 	if err != nil {
-		http.Error(w, "failed to write ndjson line", http.StatusInternalServerError)
+		return errors.New("failed to write ndjson line")
 	}
+	return nil
 }
 
 type connection struct {
@@ -58,25 +58,17 @@ func Handler(s *server.Server) http.HandlerFunc {
 			return
 		}
 
-		limitedBody := http.MaxBytesReader(w, r.Body, int64(1024*10)) // Limit to 10KB
-
-		body, err := io.ReadAll(limitedBody)
-		if err != nil {
-			http.Error(w, "failed to read request body", http.StatusInternalServerError)
-			return
-		}
-
-		var requestBody RequestBody
-		err = json.Unmarshal(body, &requestBody)
+		requestBody, err := httputil.ParseRequestBody[RequestBody](w, r)
 		if err != nil {
 			http.Error(w, "failed to parse request body", http.StatusBadRequest)
 			return
 		}
 
-		go func() {
-			time.Sleep(8 * time.Second)
-			s.UpdateProgress(requestBody.RoomID, 10.5)
-		}()
+		_, exists := s.GetRoom(requestBody.RoomID)
+		if !exists {
+			http.Error(w, "room not found", http.StatusBadRequest)
+			return
+		}
 
 		heartbeatTicker := time.NewTicker(5 * time.Second)
 		defer heartbeatTicker.Stop()
@@ -86,13 +78,19 @@ func Handler(s *server.Server) http.HandlerFunc {
 		updates := s.SubscribeToRoom(requestBody.RoomID, r.Context())
 
 		conn.flush()
+
 	out:
 		for {
 			select {
-
+			case <-r.Context().Done():
+				break out
 			case <-heartbeatTicker.C:
 				line := NewHeartbeatResponse()
-				sendNdJsonLine(w, line)
+				err := sendNdJsonLine(w, line)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					break out
+				}
 				conn.flush()
 			case room, ok := <-updates:
 				if !ok {
@@ -100,10 +98,13 @@ func Handler(s *server.Server) http.HandlerFunc {
 				}
 
 				line := NewRoomUpdateResponse(room.Progress, room.State)
-				sendNdJsonLine(w, line)
+				err := sendNdJsonLine(w, line)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					break out
+				}
 				conn.flush()
 			}
 		}
-
 	}
 }

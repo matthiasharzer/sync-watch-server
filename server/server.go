@@ -46,6 +46,7 @@ func (s *Server) cleanupObservers() {
 }
 
 func (s *Server) getNextID() string {
+	return "KE64C7kR"
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 

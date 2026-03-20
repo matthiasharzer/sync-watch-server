@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/matthiasharzer/sync-watch-server/api"
 	"github.com/matthiasharzer/sync-watch-server/api/createroom"
-	"github.com/matthiasharzer/sync-watch-server/api/ws"
+	"github.com/matthiasharzer/sync-watch-server/api/subscribe"
 	"github.com/matthiasharzer/sync-watch-server/logging"
-	"github.com/matthiasharzer/sync-watch-server/rooms"
 	"github.com/spf13/cobra"
 )
 
@@ -40,14 +40,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 var Command = &cobra.Command{
 	Use: "run",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		quarterMaster := rooms.NewQuartermaster()
+		quarterMaster := api.NewQuartermaster()
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("OK"))
 		})
 		mux.HandleFunc("POST /api/v1/create-room", createroom.Handler(quarterMaster))
-		mux.HandleFunc("/api/v1/ws", ws.Handler(quarterMaster))
+		mux.HandleFunc("/api/v1/ws", subscribe.Handler(quarterMaster))
 
 		corsMux := corsMiddleware(mux)
 
@@ -55,6 +55,8 @@ var Command = &cobra.Command{
 
 		go func() {
 			ticker := time.NewTicker(roomCleanupInterval)
+			defer ticker.Stop()
+
 			for {
 				select {
 				case <-finished:

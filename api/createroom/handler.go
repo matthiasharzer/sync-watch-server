@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/matthiasharzer/sync-watch-server/rooms"
+	"github.com/matthiasharzer/sync-watch-server/api"
 )
 
-func Handler(q *rooms.Quartermaster) http.HandlerFunc {
+func Handler(q *api.Quartermaster) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		room := q.CreateRoom()
 

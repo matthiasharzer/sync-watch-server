@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/matthiasharzer/sync-watch-server/server"
+	"github.com/matthiasharzer/sync-watch-server/api"
 )
 
-func Handler(s *server.Server) http.HandlerFunc {
+func Handler(q *api.Quartermaster) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		room := s.CreateRoom()
+		room := q.CreateRoom()
 
 		response := ResponseBody{
 			Room: ResponseRoom{
-				ID:       room.ID,
-				State:    room.State,
-				Progress: room.Progress,
+				ID: room.ID,
 			},
 		}
 
@@ -34,5 +32,4 @@ func Handler(s *server.Server) http.HandlerFunc {
 			return
 		}
 	}
-
 }

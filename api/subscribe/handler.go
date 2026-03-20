@@ -1,110 +1,58 @@
 package subscribe
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
-	"time"
 
-	"github.com/matthiasharzer/sync-watch-server/server"
-	"github.com/matthiasharzer/sync-watch-server/util/httputil"
+	"github.com/gorilla/websocket"
+	"github.com/matthiasharzer/sync-watch-server/api"
+	"github.com/matthiasharzer/sync-watch-server/logging"
 )
 
-func sendNdJsonLine(w http.ResponseWriter, line any) error {
-	lineBytes, err := json.Marshal(line)
-	if err != nil {
-		return errors.New("failed to marshal line")
-	}
-	ndjsonLine := append(lineBytes, '\n')
+const readLimit = 1024 * 1024 // 1 MiB
 
-	_, err = w.Write(ndjsonLine)
-	if err != nil {
-		return errors.New("failed to write ndjson line")
-	}
-	return nil
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-type connection struct {
-	w          http.ResponseWriter
-	flusher    http.Flusher
-	controller *http.ResponseController
-}
-
-func newConnection(w http.ResponseWriter) (*connection, error) {
-	responseController := http.NewResponseController(w)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return nil, errors.New("flusher not supported")
-	}
-
-	return &connection{
-		w:          w,
-		flusher:    flusher,
-		controller: responseController,
-	}, nil
-
-}
-
-func (c connection) flush() {
-	c.flusher.Flush()
-	_ = c.controller.SetWriteDeadline(time.Now().Add(10 * time.Second))
-}
-
-func Handler(s *server.Server) http.HandlerFunc {
+func Handler(q *api.Quartermaster) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := newConnection(w)
+		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			http.Error(w, "failed to create connection", http.StatusInternalServerError)
+			logging.Error("failed to upgrade connection", "err", err)
+			return
+		}
+		defer conn.Close()
+
+		conn.SetReadLimit(readLimit)
+
+		roomID := r.URL.Query().Get("roomId")
+		if roomID == "" {
+			_ = conn.WriteMessage(websocket.TextMessage, []byte("missing roomId query parameter"))
 			return
 		}
 
-		requestBody, err := httputil.ParseRequestBody[RequestBody](w, r)
-		if err != nil {
-			http.Error(w, "failed to parse request body", http.StatusBadRequest)
-			return
-		}
-
-		_, exists := s.GetRoom(requestBody.RoomID)
+		room, exists := q.GetRoom(roomID)
 		if !exists {
-			http.Error(w, "room not found", http.StatusBadRequest)
+			_ = conn.WriteMessage(websocket.TextMessage, []byte("room not found"))
 			return
 		}
 
-		heartbeatTicker := time.NewTicker(5 * time.Second)
-		defer heartbeatTicker.Stop()
+		room.AddClient(conn)
+		defer room.RemoveClient(conn)
 
-		w.Header().Add("Content-Type", "application/x-ndjson")
-
-		updates := s.SubscribeToRoom(requestBody.RoomID, r.Context())
-
-		conn.flush()
-
-	out:
 		for {
-			select {
-			case <-r.Context().Done():
-				break out
-			case <-heartbeatTicker.C:
-				line := NewHeartbeatResponse()
-				err := sendNdJsonLine(w, line)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					break out
-				}
-				conn.flush()
-			case room, ok := <-updates:
-				if !ok {
-					break out
-				}
-
-				line := NewRoomUpdateResponse(room.Progress, room.State)
-				err := sendNdJsonLine(w, line)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					break out
-				}
-				conn.flush()
+			messageType, message, err := conn.ReadMessage()
+			if err != nil {
+				logging.Warn("failed to read message from client", "err", err)
+				break
 			}
+
+			if messageType != websocket.TextMessage {
+				logging.Warn("received non-text message from client, ignoring")
+				continue
+			}
+
+			room.BroadcastMessage(message)
 		}
 	}
 }

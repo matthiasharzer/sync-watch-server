@@ -5,14 +5,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/matthiasharzer/sync-watch-server/api"
 	"github.com/matthiasharzer/sync-watch-server/api/createroom"
-	"github.com/matthiasharzer/sync-watch-server/api/setplaystate"
-	"github.com/matthiasharzer/sync-watch-server/api/setprogress"
 	"github.com/matthiasharzer/sync-watch-server/api/subscribe"
 	"github.com/matthiasharzer/sync-watch-server/logging"
-	"github.com/matthiasharzer/sync-watch-server/server"
 	"github.com/spf13/cobra"
 )
+
+const roomCleanupInterval = 10 * time.Minute
+const roomInactivityThreshold = 2 * time.Hour
 
 var port int
 var host string
@@ -39,29 +40,29 @@ func corsMiddleware(next http.Handler) http.Handler {
 var Command = &cobra.Command{
 	Use: "run",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		syncServer := server.New()
+		quarterMaster := api.NewQuartermaster()
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("OK"))
 		})
-		mux.HandleFunc("POST /create-room", createroom.Handler(syncServer))
-		mux.HandleFunc("POST /subscribe", subscribe.Handler(syncServer))
-		mux.HandleFunc("POST /set-progress", setprogress.Handler(syncServer))
-		mux.HandleFunc("POST /set-state", setplaystate.Handler(syncServer))
+		mux.HandleFunc("POST /api/v1/create-room", createroom.Handler(quarterMaster))
+		mux.HandleFunc("/api/v1/subscribe", subscribe.Handler(quarterMaster))
 
 		corsMux := corsMiddleware(mux)
 
 		finished := make(chan struct{})
 
 		go func() {
-			ticker := time.NewTicker(10 * time.Minute)
+			ticker := time.NewTicker(roomCleanupInterval)
+			defer ticker.Stop()
+
 			for {
 				select {
 				case <-finished:
 					return
 				case <-ticker.C:
-					syncServer.CleanupObservers()
+					quarterMaster.CleanupRooms(roomInactivityThreshold)
 				}
 			}
 		}()

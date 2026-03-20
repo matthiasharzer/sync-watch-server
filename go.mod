@@ -4,7 +4,10 @@ go 1.26.0
 
 tool honnef.co/go/tools/cmd/staticcheck
 
-require github.com/spf13/cobra v1.10.2
+require (
+	github.com/gorilla/websocket v1.5.3
+	github.com/spf13/cobra v1.10.2
+)
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect

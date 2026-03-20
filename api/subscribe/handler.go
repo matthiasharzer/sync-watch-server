@@ -8,6 +8,8 @@ import (
 	"github.com/matthiasharzer/sync-watch-server/logging"
 )
 
+const readLimit = 1024 * 1024 // 1 MiB
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
@@ -20,6 +22,8 @@ func Handler(q *api.Quartermaster) http.HandlerFunc {
 			return
 		}
 		defer conn.Close()
+
+		conn.SetReadLimit(readLimit)
 
 		roomID := r.URL.Query().Get("roomId")
 		if roomID == "" {

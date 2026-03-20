@@ -74,17 +74,21 @@ func (r *Room) broadcastClients() []*Client {
 }
 
 func (r *Room) BroadcastMessage(message []byte) {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
-
 	clients := r.broadcastClients()
 
 	for _, client := range clients {
 		err := client.SendMessage(message)
 		if err != nil {
-			logging.Warn("failed to send message to client: %v", err)
+			logging.Warn("failed to send message to client", "err", err)
 		}
 	}
+
+	r.Interact()
+}
+
+func (r *Room) Interact() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	r.LastInteraction = time.Now().UTC().Unix()
 }
@@ -104,7 +108,7 @@ func (r *Room) Close() {
 	for client := range r.clients {
 		err := client.Close()
 		if err != nil {
-			logging.Warn("failed to close client connection: %v", err)
+			logging.Warn("failed to close client connection", "err", err)
 		}
 	}
 
@@ -149,15 +153,6 @@ func (q *Quartermaster) GetRoom(id string) (*Room, bool) {
 
 	room, ok := q.rooms[id]
 	return room, ok
-}
-
-func (q *Quartermaster) InteractWithRoom(id string) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-
-	if room, ok := q.rooms[id]; ok {
-		room.LastInteraction = time.Now().UTC().Unix()
-	}
 }
 
 func (q *Quartermaster) CleanupRooms(timeout time.Duration) {

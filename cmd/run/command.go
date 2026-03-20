@@ -47,7 +47,7 @@ var Command = &cobra.Command{
 			w.Write([]byte("OK"))
 		})
 		mux.HandleFunc("POST /api/v1/create-room", createroom.Handler(quarterMaster))
-		mux.HandleFunc("/api/v1/ws", subscribe.Handler(quarterMaster))
+		mux.HandleFunc("/api/v1/subscribe", subscribe.Handler(quarterMaster))
 
 		corsMux := corsMiddleware(mux)
 
